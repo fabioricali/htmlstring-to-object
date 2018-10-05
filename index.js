@@ -37,7 +37,7 @@ const kBlockTextElements = {
     pre: true
 };
 
-function arr_back(arr) {
+function last(arr) {
     return arr[arr.length - 1];
 }
 
@@ -46,56 +46,22 @@ function arr_back(arr) {
  */
 class Node {
     constructor() {
-        this.childNodes = [];
+        this.children = [];
     }
 }
 
-/**
- * HTMLElement, which contains a set of children.
- *
- * Note: this is a minimalist implementation, no complete tree
- *   structure provided (no parentNode, nextSibling,
- *   previousSibling etc).
- * @class HTMLElement
- * @extends {Node}
- */
-class HTMLElement extends Node {
-    /**
-     * Creates an instance of HTMLElement.
-     * @param {string} name                tagName
-     * @param {KeyAttributes} keyAttrs    id and class attribute
-     * @param {string} [rawAttrs]    attributes in string
-     *
-     * @memberof HTMLElement
-     */
-    constructor(name, keyAttrs, rawAttrs) {
+
+class Element extends Node {
+
+    constructor(name, props) {
         super();
-        this.classNames = [];
-        /**
-         * Node Type declaration.
-         * @type {Number}
-         */
-        this.nodeType = NodeType.ELEMENT_NODE;
-        this.tagName = name;
-        this.rawAttrs = rawAttrs || '';
-        // this.parentNode = null;
-        this.childNodes = [];
-        if (keyAttrs.id) {
-            this.id = keyAttrs.id;
-        }
-        if (keyAttrs.class) {
-            this.classNames = keyAttrs.class.split(/\s+/);
-        }
+        this.type = name;
+        this.props = Object.assign({}, props);
+        this.children = [];
     }
 
-    /**
-     * Append a child node to childNodes
-     * @param  {Node} node node to append
-     * @return {Node}      node appended
-     */
     appendChild(node) {
-        // node.parentNode = this;
-        this.childNodes.push(node);
+        this.children.push(node);
         return node;
     }
 
@@ -112,22 +78,18 @@ class HTMLElement extends Node {
     }
 */
 
-/**
- * Parses HTML and returns a root element
- * Parse a chuck of HTML source.
- * @param  {string} data      html
- * @param options
- * @return {HTMLElement}      root element
- */
 
 function parse(data, options) {
-    const root = new HTMLElement(null, {});
+    options = options || {};
+
+    const root = new Element(null, {});
     let currentParent = root;
     const stack = [root];
     let lastTextPos = -1;
-    options = options || {};
     let match;
+
     while (match = kMarkupPattern.exec(data)) {
+
         if (lastTextPos > -1) {
             if (lastTextPos + match[0].length < kMarkupPattern.lastIndex) {
                 // if has content
@@ -135,52 +97,54 @@ function parse(data, options) {
                 currentParent.appendChild(text);
             }
         }
+
         lastTextPos = kMarkupPattern.lastIndex;
         if (match[0][1] === '!') {
             // this is a comment
             continue;
         }
+
         if (options.lowerCaseTagName)
             match[2] = match[2].toLowerCase();
+
         if (!match[1]) {
             // not </ tags
-            const attrs = {};
+            const props = {};
             for (let attMatch; attMatch = kAttributePattern.exec(match[3]);)
-                attrs[attMatch[2]] = attMatch[4] || attMatch[5] || attMatch[6];
+                props[attMatch[2]] = attMatch[4] || attMatch[5] || attMatch[6];
 
-            // console.log(attrs);
-            if (!match[4] && kElementsClosedByOpening[currentParent.tagName]) {
-                if (kElementsClosedByOpening[currentParent.tagName][match[2]]) {
+            if (!match[4] && kElementsClosedByOpening[currentParent.type]) {
+                if (kElementsClosedByOpening[currentParent.type][match[2]]) {
                     stack.pop();
-                    currentParent = arr_back(stack);
+                    currentParent = last(stack);
                 }
             }
 
-            console.log('ATTRS', attrs, match[3])
-
-            currentParent = currentParent.appendChild(new HTMLElement(match[2], attrs, match[3]));
+            currentParent = currentParent.appendChild(new Element(match[2], props));
             stack.push(currentParent);
 
             if (kBlockTextElements[match[2]]) {
                 // a little test to find next </script> or </style> ...
                 const closeMarkup = '</' + match[2] + '>';
                 const index = data.indexOf(closeMarkup, kMarkupPattern.lastIndex);
+
                 if (options[match[2]]) {
                     let text;
+
                     if (index === -1) {
                         // there is no matching ending for the text element.
                         text = data.substr(kMarkupPattern.lastIndex);
-                    }
-                    else {
+                    } else {
                         text = data.substring(kMarkupPattern.lastIndex, index);
                     }
+
                     if (text.length > 0)
                         currentParent.appendChild(text);
                 }
+
                 if (index === -1) {
                     lastTextPos = kMarkupPattern.lastIndex = data.length + 1;
-                }
-                else {
+                } else {
                     lastTextPos = kMarkupPattern.lastIndex = index + closeMarkup.length;
                     match[1] = 'true';
                 }
@@ -189,17 +153,16 @@ function parse(data, options) {
         if (match[1] || match[4] || kSelfClosingElements[match[2]]) {
             // </ or /> or <br> etc.
             while (true) {
-                if (currentParent.tagName === match[2]) {
+                if (currentParent.type === match[2]) {
                     stack.pop();
-                    currentParent = arr_back(stack);
+                    currentParent = last(stack);
                     break;
-                }
-                else {
+                } else {
                     // Trying to close current tag, and move on
-                    if (kElementsClosedByClosing[currentParent.tagName]) {
-                        if (kElementsClosedByClosing[currentParent.tagName][match[2]]) {
+                    if (kElementsClosedByClosing[currentParent.type]) {
+                        if (kElementsClosedByClosing[currentParent.type][match[2]]) {
                             stack.pop();
-                            currentParent = arr_back(stack);
+                            currentParent = last(stack);
                             continue;
                         }
                     }
