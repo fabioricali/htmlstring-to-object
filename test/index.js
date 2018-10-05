@@ -12,7 +12,6 @@ describe('parser', function () {
         `);
 
         console.log(root)
-        //console.log(root.childNodes[0].childNodes[0])
 
     })
 });
