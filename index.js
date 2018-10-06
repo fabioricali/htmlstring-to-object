@@ -1,6 +1,6 @@
 // https://html.spec.whatwg.org/multipage/custom-elements.html#valid-custom-element-name
 const markupPattern = /<!--[^]*?(?=-->)-->|<(\/?)([a-z][-.0-9_a-z]*)\s*([^>]*?)(\/?)>/ig;
-const attributePattern = /(^|\s)(.*?)\s*=\s*("([^"]+)"|'([^']+)'|(\S+))/ig;
+const attributePattern = /(^|\s)([\w-:]+)\s*=\s*("([^"]+)"|'([^']+)'|(\S+))/ig;
 
 const selfClosingElements = {
     meta: true,
@@ -33,13 +33,17 @@ function last(arr) {
     return arr[arr.length - 1];
 }
 
+function removeNLS(str) {
+    return str.replace(/\n\s+/gm, '')
+}
+
 class Element {
 
-    constructor(name, props, isSVG = false) {
+    constructor(name, props, isSVG) {
         this.type = name;
         this.props = Object.assign({}, props);
         this.children = [];
-        this.isSVG = isSVG;
+        this.isSVG = isSVG || /^svg$/.test(name);
     }
 
     appendChild(node) {
@@ -52,18 +56,19 @@ class Element {
 function parse(data) {
 
     const root = new Element(null, {});
-    let currentParent = root;
     const stack = [root];
+    let currentParent = root;
     let lastTextPos = -1;
     let match;
+    let props;
 
     while (match = markupPattern.exec(data)) {
 
         if (lastTextPos > -1) {
             if (lastTextPos > -1 && lastTextPos + match[0].length < markupPattern.lastIndex) {
-                // if has content
                 // remove new line space
-                const text = data.substring(lastTextPos, markupPattern.lastIndex - match[0].length).replace(/\n\s+/gm, '');
+                const text = removeNLS(data.substring(lastTextPos, markupPattern.lastIndex - match[0].length));
+                // if has content
                 if (text)
                     currentParent.appendChild(text);
             }
@@ -77,9 +82,11 @@ function parse(data) {
 
         if (!match[1]) {
             // not </ tags
-            const props = {};
-            for (let attMatch; attMatch = attributePattern.exec(match[3]);)
+            props = {};
+
+            for (let attMatch; attMatch = attributePattern.exec(match[3]);) {
                 props[attMatch[2]] = attMatch[4] || attMatch[5] || attMatch[6];
+            }
 
             if (!match[4] && elementsClosedByOpening[currentParent.type]) {
                 if (elementsClosedByOpening[currentParent.type][match[2]]) {
@@ -88,9 +95,8 @@ function parse(data) {
                 }
             }
 
-            currentParent = currentParent.appendChild(new Element(match[2], props));
+            currentParent = currentParent.appendChild(new Element(match[2], props, currentParent.isSVG));
             stack.push(currentParent);
-
         }
 
         if (match[1] || match[4] || selfClosingElements[match[2]]) {
